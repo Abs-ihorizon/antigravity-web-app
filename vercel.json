@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/web/:path*",
+      "destination": "https://test88.odoo.com/web/:path*"
+    }
+  ]
+}
