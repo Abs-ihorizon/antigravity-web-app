@@ -16,10 +16,10 @@ export function BottomNav() {
         <span className="material-symbols-outlined">add_circle</span>
         <span className="font-['Public_Sans'] text-[11px] font-medium leading-[1.6]">Add</span>
       </NavLink>
-      <div className="flex flex-col items-center justify-center text-[#44474a] dark:text-[#c4c7ca] opacity-70 hover:opacity-100 transition-all cursor-pointer">
+      <NavLink to="/reports" className={({isActive}) => `flex flex-col items-center justify-center transition-all cursor-pointer ${isActive ? 'text-[#426087] dark:text-[#abc8f5] font-bold scale-110' : 'text-[#44474a] dark:text-[#c4c7ca] opacity-70 hover:opacity-100'}`}>
         <span className="material-symbols-outlined">analytics</span>
         <span className="font-['Public_Sans'] text-[11px] font-medium leading-[1.6]">Reports</span>
-      </div>
+      </NavLink>
     </nav>
   );
 }

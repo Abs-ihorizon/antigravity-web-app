@@ -3,6 +3,7 @@ import { Layout } from './components/Layout';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { ManualEntry } from './pages/ManualEntry';
+import { Reports } from './pages/Reports';
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
           <Route path="login" element={<Login />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="manual-entry" element={<ManualEntry />} />
+          <Route path="reports" element={<Reports />} />
         </Route>
       </Routes>
     </BrowserRouter>

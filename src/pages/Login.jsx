@@ -39,7 +39,7 @@ export function Login() {
       <div className="flex flex-col items-center mb-8 text-center">
         <div className="w-48 h-auto mb-6 relative flex justify-center">
           <div className="absolute inset-0 bg-primary-container/20 rounded-full blur-2xl"></div>
-          <img alt="Jama'at-ul-Muslimeen Logo" className="relative w-full h-full object-contain" src="https://lh3.googleusercontent.com/aida/ADBb0uh9y8xS78eZJaQSJsyQP25IrL17C0BEvJbX2T-_UWXpNRrfEv_VYKwNylGlGkIuubwMaFmndYP3Efikz9H9tE-lxpQITgdUnZQqtvX_sQYdCpT7uIzyBIbLgw0vZmFUlUYqrFEhaszEPkSnV_2c42S4IOdenaREvKD6dS3PxAIK31N5u_HpFjSL3TBs1NCjOO5Z5pXi4m7CtKAkcHPgmztX6TVU-XqzwH-CuwUl8HUHGql3qqwtmByPckE55o8QhUyEt4OImTB9Fg"/>
+          <img alt="Jama'at-ul-Muslimeen Logo" className="relative w-full h-full object-contain dark:invert" src="/logo.png"/>
         </div>
         <h1 className="font-headline font-extrabold text-3xl text-on-surface tracking-tight mb-2">Digital Ledger</h1>
         <p className="text-on-surface-variant font-body text-sm max-w-[280px] leading-relaxed">
@@ -126,6 +126,11 @@ export function Login() {
       </div>
 
       <div className="fixed bottom-0 left-0 -z-10 w-1/3 h-1/2 bg-gradient-to-tr from-primary-container/10 to-transparent pointer-events-none"></div>
+      
+      <div className="fixed bottom-6 left-0 right-0 flex flex-col items-center justify-center opacity-80 pointer-events-none pointer-events-none select-none">
+         <p className="font-label text-[9px] font-bold text-on-surface-variant uppercase tracking-widest mb-2">Powered By</p>
+         <img src="/affinity-logo.png" alt="Affinity Business Suite Logo" className="h-[22px] object-contain mix-blend-multiply dark:mix-blend-lighten grayscale" />
+      </div>
     </main>
   );
 }

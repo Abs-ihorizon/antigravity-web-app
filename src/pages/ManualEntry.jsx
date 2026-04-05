@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { odoo } from '../lib/odooClient';
 
@@ -8,11 +8,42 @@ export function ManualEntry() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState(false);
   const [submittedData, setSubmittedData] = useState(null);
+  const [myManager, setMyManager] = useState('');
+  const [approvalRequired, setApprovalRequired] = useState(false);
+  const [sequenceVal, setSequenceVal] = useState('');
+  const [sequenceId, setSequenceId] = useState(null);
+  const [seqError, setSeqError] = useState('');
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      const portalUser = localStorage.getItem('portal_user_name');
+      if (portalUser) {
+        // Fetch Manager Data
+        const mgrData = await odoo.fetchMyManager(portalUser);
+        if (mgrData) {
+           setMyManager(mgrData.managerName || '');
+           setApprovalRequired(mgrData.approvalRequired);
+        }
+        
+        // Fetch Sequence Data
+        const seqInfo = await odoo.fetchNextSequence(portalUser);
+        if (seqInfo.error) {
+           setSeqError(seqInfo.error);
+        } else {
+           setSequenceVal(seqInfo.nextValueStr);
+           setSequenceId(seqInfo.sequenceId);
+        }
+      }
+    };
+    fetchUserData();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const payerName = formData.get('payer');
+    const contactNo = formData.get('contact_no');
+    const remarks = formData.get('remarks');
     
     setLoading(true);
     setMessage('');
@@ -23,26 +54,32 @@ export function ManualEntry() {
       let partnerId = false;
       if (payerName) {
          setMessage('Verifying Payer Contact in Odoo...');
-         partnerId = await odoo.getOrCreatePartner(payerName);
+         partnerId = await odoo.getOrCreatePartner(payerName, contactNo);
       }
 
       setMessage('Syncing Payment...');
 
       // 2. account.payment payload construction
+      const portalUserId = localStorage.getItem('portal_user_id');
+      const receiptNum = sequenceVal; // Lock standard sequence mapping
+      
       const paymentData = {
+        name: receiptNum, // Force standard name convention
         payment_type: 'inbound',
         partner_type: 'customer', 
         amount: parseFloat(formData.get('amount')) || 0.0,
         date: formData.get('date'),
         journal_id: parseInt(formData.get('journal_id'), 10),
-        // 'ref' does not exist in some Odoo versions. Let's try 'payment_reference' or 'communication'
-        // If this fails, we can add it to 'name' or let the user choose.
-        payment_reference: formData.get('receipt_number'),
-        // Automatically inject the linked contact explicitly
+        payment_reference: receiptNum,
+        x_portal_user: portalUserId ? parseInt(portalUserId) : null,
+        ...(approvalRequired && { x_approval_state: 'pending_approval' }),
+        ...(myManager && approvalRequired && { x_manager_user: myManager }),
+        ...(remarks && { memo: remarks }), // Directly maps to the user's 'memo' DB field
         ...(partnerId && { partner_id: partnerId })
       };
 
       await odoo.createPayment(paymentData);
+
       setSubmittedData({ ...paymentData, payerName });
     } catch (err) {
       setError(true);
@@ -54,7 +91,12 @@ export function ManualEntry() {
 
   return (
     <main className="w-full pt-24 pb-32 px-4 max-w-2xl mx-auto">
-      {message && (
+      {seqError && (
+        <div className="mb-4 p-4 rounded-xl font-bold text-sm text-center bg-error-container text-on-error-container border border-error/30 animate-in slide-in-from-top-2">
+          {seqError}
+        </div>
+      )}
+      {message && !seqError && (
         <div className={`mb-4 p-4 rounded-xl font-bold text-sm text-center border ${error ? 'bg-error-container text-on-error-container border-error/30' : 'bg-green-100 text-green-800 border-green-300'}`}>
           {message}
         </div>
@@ -62,8 +104,8 @@ export function ManualEntry() {
       
       {/* Content Header */}
       <div className="mb-8 flex flex-col gap-2">
-        <h2 className="font-headline text-3xl font-extrabold text-on-surface tracking-tight">New Entry</h2>
-        <p className="text-on-surface-variant font-body">Log a manual transaction into the digital repository.</p>
+        <h2 className="font-headline text-3xl font-extrabold text-on-surface tracking-tight">New Entry <span className="font-['Public_Sans'] font-medium text-2xl text-on-surface-variant font-normal">| نئی رسید</span></h2>
+        <p className="text-on-surface-variant font-body">Log a manual transaction | دستی لین دین درج کریں</p>
       </div>
 
       <div className="bg-surface-container-lowest rounded-full p-8 editorial-shadow border border-outline-variant/10 rounded-[2rem]">
@@ -72,7 +114,13 @@ export function ManualEntry() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant ml-1">Receipt Number</label>
-              <input name="receipt_number" required className="w-full bg-surface-container-highest border-none rounded-md px-4 py-3 focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all outline-none text-on-surface" placeholder="REC-00219" type="text"/>
+              <input 
+                 name="receipt_number" 
+                 value={sequenceVal || "Loading..."} 
+                 readOnly 
+                 className="w-full bg-slate-100 dark:bg-slate-800/50 text-slate-500 font-bold border border-slate-200 dark:border-slate-800 rounded-md px-4 py-3 outline-none cursor-not-allowed" 
+                 type="text"
+              />
             </div>
             <div className="space-y-2">
               <label className="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant ml-1">Date</label>
@@ -80,9 +128,15 @@ export function ManualEntry() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant ml-1">Payer Name</label>
-            <input name="payer" className="w-full bg-surface-container-highest border-none rounded-md px-4 py-3 focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all outline-none text-on-surface" placeholder="Full Legal Name" type="text"/>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant ml-1">Payer Name</label>
+              <input name="payer" className="w-full bg-surface-container-highest border-none rounded-md px-4 py-3 focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all outline-none text-on-surface" placeholder="Full Legal Name" type="text"/>
+            </div>
+            <div className="space-y-2">
+              <label className="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant ml-1">Contact No</label>
+              <input name="contact_no" className="w-full bg-surface-container-highest border-none rounded-md px-4 py-3 focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all outline-none text-on-surface" placeholder="+92 300 0000000" type="tel"/>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -107,11 +161,22 @@ export function ManualEntry() {
             </div>
           </div>
 
+          <div className="space-y-2">
+            <label className="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant ml-1">Remarks (Memo)</label>
+            <textarea name="remarks" rows="2" className="w-full bg-surface-container-highest border-none rounded-md px-4 py-3 focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all outline-none text-on-surface resize-none" placeholder="Optional notes..."></textarea>
+          </div>
+
           {/* Action Buttons */}
           <div className="flex flex-col gap-4 pt-4">
-            <button disabled={loading} className="w-full bg-gradient-to-r from-[#426087] to-[#356380] text-white font-headline font-bold py-4 rounded-full shadow-lg shadow-primary/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50" type="submit">
-              <span>{loading ? "Syncing..." : "Sync to Odoo"}</span>
-              {!loading && <span className="material-symbols-outlined text-sm">sync</span>}
+            <button disabled={loading || !!seqError} className="w-full bg-gradient-to-r from-[#426087] to-[#356380] text-white font-headline font-bold py-4 rounded-full shadow-lg shadow-primary/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50" type="submit">
+              <span>
+                 {seqError ? "Limit Reached" :
+                  loading ? "Syncing..." : 
+                  approvalRequired ? `Post to Manager ${myManager ? '(' + myManager + ')' : ''}` : 
+                  "Sync to Odoo"}
+              </span>
+              {!loading && !seqError && <span className="material-symbols-outlined text-sm">{approvalRequired ? 'send' : 'sync'}</span>}
+              {seqError && <span className="material-symbols-outlined text-sm">block</span>}
             </button>
             <button className="w-full py-4 rounded-full font-body font-semibold text-on-surface-variant hover:bg-surface-container-high transition-colors active:scale-[0.98]" type="button" onClick={() => navigate('/dashboard')}>
               Cancel
@@ -127,11 +192,17 @@ export function ManualEntry() {
           {/* UI Wrapper (Hidden during actual print) */}
           <div className="print:hidden p-6 flex flex-col h-full overflow-y-auto">
              <div className="flex flex-col items-center justify-center text-center space-y-4 py-8">
-               <div className="w-20 h-20 bg-green-100 text-green-700 rounded-full flex items-center justify-center">
-                 <span className="material-symbols-outlined text-4xl">check_circle</span>
+               <div className={`w-20 h-20 rounded-full flex items-center justify-center ${approvalRequired ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                 <span className="material-symbols-outlined text-4xl">{approvalRequired ? 'schedule_send' : 'check_circle'}</span>
                </div>
-               <h2 className="font-headline text-2xl font-bold text-on-surface">Payment Synced!</h2>
-               <p className="font-body text-on-surface-variant text-sm">The transaction is safely in your database.</p>
+               <h2 className="font-headline text-2xl font-bold text-on-surface">
+                 {approvalRequired ? 'Pending Approval' : 'Payment Synced!'}
+               </h2>
+               <p className="font-body text-on-surface-variant text-sm">
+                 {approvalRequired 
+                   ? `The transaction was routed to your manager (${myManager || 'Unassigned'}) for sign-off.` 
+                   : 'The transaction is safely in your database.'}
+               </p>
              </div>
 
              {/* Action Buttons */}
@@ -140,13 +211,13 @@ export function ManualEntry() {
                   onClick={() => window.print()}
                   className="w-full py-4 rounded-xl bg-secondary-container text-on-secondary-container font-headline font-bold uppercase tracking-widest border border-secondary/20 shadow flex items-center justify-center gap-2 active:scale-95 transition-transform"
                 >
-                  <span className="material-symbols-outlined">print</span> Print Receipt
+                  <span className="material-symbols-outlined">print</span> Print Receipt | رسید پرنٹ کریں
                 </button>
                 <button 
                   onClick={() => navigate('/dashboard')}
                   className="w-full py-4 rounded-xl bg-primary text-white font-headline font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-lg shadow-primary/20"
                 >
-                  Return to Dashboard
+                  Return to Dashboard | ڈیش بورڈ پر واپس جائیں
                 </button>
              </div>
           </div>

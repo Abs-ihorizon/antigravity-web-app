@@ -2,17 +2,14 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// https://vitejs.dev/config/
 export default defineConfig({
-  // Vercel aur modern hosting ke liye '/' behtar hai './' se
-  base: '/', 
+  base: './',
   server: {
     proxy: {
-      // Ye proxy sirf LOCAL testing (npm run dev) ke waqt kaam karegi
       '/web': {
         target: 'https://test88.odoo.com',
         changeOrigin: true,
-        secure: true, // Odoo HTTPS hai isliye true rakhen
+        secure: false
       }
     }
   },
