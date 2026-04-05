@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { odoo } from '../lib/odooClient';
+import { syncManager } from '../lib/syncManager';
 
 export function ManualEntry() {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ export function ManualEntry() {
   const [sequenceVal, setSequenceVal] = useState('');
   const [sequenceId, setSequenceId] = useState(null);
   const [seqError, setSeqError] = useState('');
+  const [isOffline, setIsOffline] = useState(false);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -27,7 +29,10 @@ export function ManualEntry() {
         
         // Fetch Sequence Data
         const seqInfo = await odoo.fetchNextSequence(portalUser);
-        if (seqInfo.error) {
+        if (seqInfo.offline) {
+           setIsOffline(true);
+           setSequenceVal('OFFLINE-PENDING');
+        } else if (seqInfo.error) {
            setSeqError(seqInfo.error);
         } else {
            setSequenceVal(seqInfo.nextValueStr);
@@ -50,6 +55,26 @@ export function ManualEntry() {
     setError(false);
 
     try {
+      const portalUserId = localStorage.getItem('portal_user_id');
+      
+      // INTERCEPT OFFLINE CACHE EXPLICITLY!
+      if (!navigator.onLine || isOffline) {
+          const payload = {
+              _rawPayerName: payerName,
+              _rawContactNo: contactNo,
+              amount: parseFloat(formData.get('amount')) || 0.0,
+              date: formData.get('date'),
+              journal_id: parseInt(formData.get('journal_id'), 10),
+              x_portal_user: portalUserId ? parseInt(portalUserId) : null,
+              ...(approvalRequired && { x_approval_state: 'pending_approval' }),
+              ...(myManager && approvalRequired && { x_manager_user: myManager }),
+              ...(remarks && { memo: remarks })
+          };
+          syncManager.addToQueue(payload);
+          setSubmittedData({ ...payload, payerName, offlinePending: true });
+          return;
+      }
+
       // 1. Map Payee Name directly to a contact in Odoo
       let partnerId = false;
       if (payerName) {
@@ -60,7 +85,6 @@ export function ManualEntry() {
       setMessage('Syncing Payment...');
 
       // 2. account.payment payload construction
-      const portalUserId = localStorage.getItem('portal_user_id');
       const receiptNum = sequenceVal; // Lock standard sequence mapping
       
       const paymentData = {
@@ -196,10 +220,12 @@ export function ManualEntry() {
                  <span className="material-symbols-outlined text-4xl">{approvalRequired ? 'schedule_send' : 'check_circle'}</span>
                </div>
                <h2 className="font-headline text-2xl font-bold text-on-surface">
-                 {approvalRequired ? 'Pending Approval' : 'Payment Synced!'}
+                 {submittedData.offlinePending ? 'Saved Offline' : approvalRequired ? 'Pending Approval' : 'Payment Synced!'}
                </h2>
                <p className="font-body text-on-surface-variant text-sm">
-                 {approvalRequired 
+                 {submittedData.offlinePending 
+                   ? 'Network unavailable. Saved locally. It will auto-sync when you reconnect.'
+                   : approvalRequired 
                    ? `The transaction was routed to your manager (${myManager || 'Unassigned'}) for sign-off.` 
                    : 'The transaction is safely in your database.'}
                </p>

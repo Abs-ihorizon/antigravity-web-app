@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { odoo } from '../lib/odooClient';
+import { syncManager } from '../lib/syncManager';
 
 export function TopBar() {
   const navigate = useNavigate();
@@ -8,6 +9,8 @@ export function TopBar() {
   const [approvals, setApprovals] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [loadingAction, setLoadingAction] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [offlineCount, setOfflineCount] = useState(0);
 
   useEffect(() => {
     const fetchApprovals = async () => {
@@ -21,7 +24,29 @@ export function TopBar() {
     };
     fetchApprovals();
     const interval = setInterval(fetchApprovals, 20000);
-    return () => clearInterval(interval);
+
+    // Sync Manager Listeners
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncManager.flushQueue();
+    };
+    const handleOffline = () => setIsOnline(false);
+    
+    const updateQueueCount = () => {
+      setOfflineCount(syncManager.getQueue().length);
+    };
+    updateQueueCount();
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('offline-queue-updated', updateQueueCount);
+
+    return () => {
+       clearInterval(interval);
+       window.removeEventListener('online', handleOnline);
+       window.removeEventListener('offline', handleOffline);
+       window.removeEventListener('offline-queue-updated', updateQueueCount);
+    }
   }, []);
 
   const handleAction = async (id, status) => {
@@ -56,10 +81,22 @@ export function TopBar() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1 bg-green-100 dark:bg-green-900/30 rounded-full border border-green-200 dark:border-green-800">
-          <span className="material-symbols-outlined text-[14px] text-green-600 dark:text-green-400" style={{fontVariationSettings: '"FILL" 1'}}>cloud_done</span>
-          <span className="text-[10px] font-bold text-green-700 dark:text-green-300 uppercase tracking-wider hidden sm:inline">Odoo Synced</span>
-        </div>
+        {isOnline && offlineCount === 0 ? (
+          <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1 bg-green-100 dark:bg-green-900/30 rounded-full border border-green-200 dark:border-green-800 transition-colors">
+            <span className="material-symbols-outlined text-[14px] text-green-600 dark:text-green-400" style={{fontVariationSettings: '"FILL" 1'}}>cloud_done</span>
+            <span className="text-[10px] font-bold text-green-700 dark:text-green-300 uppercase tracking-wider hidden sm:inline">Odoo Synced</span>
+          </div>
+        ) : !isOnline ? (
+          <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1 bg-red-100 dark:bg-red-900/30 rounded-full border border-red-200 dark:border-red-800 transition-colors">
+            <span className="material-symbols-outlined text-[14px] text-red-600 dark:text-red-400">wifi_off</span>
+            <span className="text-[10px] font-bold text-red-700 dark:text-red-300 uppercase tracking-wider hidden sm:inline">Offline</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1 bg-orange-100 dark:bg-orange-900/30 rounded-full border border-orange-200 dark:border-orange-800 transition-colors">
+            <span className="material-symbols-outlined text-[14px] text-orange-600 dark:text-orange-400 animate-spin">sync</span>
+            <span className="text-[10px] font-bold text-orange-700 dark:text-orange-300 uppercase tracking-wider hidden sm:inline">Syncing ({offlineCount})</span>
+          </div>
+        )}
         <button 
           onClick={() => setShowModal(true)}
           className="relative w-10 h-10 flex items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition-colors"

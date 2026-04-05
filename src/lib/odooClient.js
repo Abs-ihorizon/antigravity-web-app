@@ -333,6 +333,9 @@ class OdooClient {
   // --- Sequence Management API ---
 
   async fetchNextSequence(portalName) {
+    if (!navigator.onLine) {
+       return { offline: true, error: null };
+    }
     if (!this.uid || !portalName) return { error: "Authentication required" };
 
     try {

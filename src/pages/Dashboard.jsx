@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { odoo } from '../lib/odooClient';
 import { SearchableSelect } from '../components/SearchableSelect';
+import { syncManager } from '../lib/syncManager';
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -18,6 +19,7 @@ export function Dashboard() {
   
   // Data states
   const [payments, setPayments] = useState([]);
+  const [offlineQueue, setOfflineQueue] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
@@ -35,6 +37,12 @@ export function Dashboard() {
       setTeamMembers(team || []);
     };
     fetchHierarchy();
+
+    const updateOffline = () => setOfflineQueue(syncManager.getQueue());
+    updateOffline(); // Initial load
+    window.addEventListener('offline-queue-updated', updateOffline);
+
+    return () => window.removeEventListener('offline-queue-updated', updateOffline);
   }, []);
 
   const fetchDashboardData = async () => {
@@ -207,12 +215,49 @@ export function Dashboard() {
         <div className="space-y-4">
           {loading && <p className="text-center text-outline-variant font-label text-xs uppercase animate-pulse">Fetching records...</p>}
           
-          {!loading && payments.length === 0 && (
+          {!loading && payments.length === 0 && offlineQueue.length === 0 && (
             <div className="bg-surface-container-lowest p-6 rounded-2xl border border-dashed border-outline-variant text-center space-y-2">
               <span className="material-symbols-outlined text-outline-variant text-3xl">receipt_long</span>
               <p className="font-body text-sm text-on-surface-variant">No manual entries logged by you on this date.</p>
             </div>
           )}
+
+          {/* Render Offline Cached Queue first! */}
+          {offlineQueue.map((item) => {
+            const pay = item.payload;
+            const journalName = pay.journal_id && pay.journal_id === 6 ? 'Cash / Main' : pay.journal_id === 8 ? 'Bank (HBL)' : 'Pending Journal';
+            
+            return (
+              <div 
+                key={item._localId} 
+                className="bg-orange-50/50 dark:bg-orange-900/10 p-5 rounded-2xl flex items-center gap-4 transition-transform border border-orange-200 dark:border-orange-800 border-dashed"
+              >
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
+                  <span className="material-symbols-outlined" style={{fontVariationSettings: '"FILL" 1'}}>
+                    cloud_off
+                  </span>
+                </div>
+                <div className="flex-1">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-headline font-bold text-on-surface text-base">{journalName}</h3>
+                      <p className="font-body text-[10px] text-on-surface-variant flex gap-1 mt-0.5">
+                        <span className="font-semibold">{item._localId}</span>
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-headline font-bold text-on-surface text-base">{pay.amount ? pay.amount.toLocaleString() : '0'}/-</span>
+                      <div className="mt-1">
+                        <span className="inline-flex items-center font-label text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter border border-orange-300 text-orange-700 bg-orange-100">
+                          PENDING SYNC
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
 
           {!loading && payments.map((payment) => {
             const journalName = payment.journal_id ? payment.journal_id[1] : 'Unknown Journal';
